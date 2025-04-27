@@ -65,7 +65,7 @@ def main():
         file_name = file_info["file_name"]
         print(f"Gefunden: {file_name}")
 
-        print("🔗 Download-Link wird geholt...")
+        print("Download-Link wird geholt...")
         download_url = fetch_download_url(file_id)
 
         downloads_dir = get_downloads_folder()
