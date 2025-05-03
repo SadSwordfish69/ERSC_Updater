@@ -1,83 +1,73 @@
-from dotenv import load_dotenv
 import os
 import requests
-import zipfile
-import platform
-from pathlib import Path
-from tqdm import tqdm
+from dotenv import load_dotenv
 
+# .env-Datei laden
 load_dotenv()
-API_KEY = os.getenv("NEXUS_API_KEY")
-GAME_DOMAIN = "eldenring"
-MOD_ID = 510
-HEADERS = {"apikey": API_KEY, "Accept": "application/json"}
 
-def get_downloads_folder():
-    if platform.system() == "Windows":
-        return Path(os.environ["USERPROFILE"]) / "Downloads"
+def determine_target_directory():
+    print("Möchten Sie den Zielordner selbst wählen? (y/n)")
+    choice = input().strip().lower()
+    if choice == 'y':
+        print("Bitte geben Sie den Zielordner an:")
+        target_directory = input().strip()
+        if not os.path.exists(target_directory):
+            print(f"Der angegebene Ordner '{target_directory}' existiert nicht.")
+            return None
+        return target_directory
+    elif choice == 'n':
+        # Mögliche Standard-Installationsverzeichnisse von Steam
+        steam_directories = [
+            "C:\\Program Files (x86)\\Steam",
+            "C:\\Steam",
+            "D:\\Program Files (x86)\\Steam",
+            "D:\\Steam",
+            "E:\\Steam",
+            "F:\\Steam",
+            # Weitere Laufwerke und Verzeichnisse können hier hinzugefügt werden
+        ]
+        # Zielordner, nach dem gesucht werden soll
+        target_folder = "steamapps\\common\\ELDEN RING\\Game"
+
+        for steam_dir in steam_directories:
+            # Überprüfen, ob das Steam-Verzeichnis existiert
+            if os.path.exists(steam_dir):
+                # Pfad zum "steamapps" Ordner
+                steamapps_path = os.path.join(steam_dir, "steamapps")
+                if os.path.exists(steamapps_path):
+                    # Überprüfen, ob der Zielordner vorhanden ist
+                    target_path = os.path.join(steamapps_path, target_folder)
+                    if os.path.exists(target_path):
+                        print(f"Gefunden: {target_path}")
+                        return target_path
+        print("Der Ordner 'steamapps\\common\\ELDEN RING\\Game' wurde in keinem der Standard-Installationsverzeichnisse gefunden.")
+        return None
     else:
-        return Path.home() / "Downloads"
+        print("Ungültige Eingabe. Bitte 'y' oder 'n' eingeben.")
+        return None
 
-def fetch_latest_file_info():
-    url = f"https://api.nexusmods.com/v1/games/{GAME_DOMAIN}/mods/{MOD_ID}/files.json"
-    r = requests.get(url, headers=HEADERS)
-    if r.status_code != 200:
-        raise Exception("Fehler beim Abrufen der Mod-Dateien.")
-    files = r.json().get("files", [])
-    main_files = [f for f in files if f.get("category_name") == "MAIN"]
-    if not main_files:
-        raise Exception("Keine Hauptdatei gefunden.")
-    return sorted(main_files, key=lambda x: x["file_id"], reverse=True)[0]  # neueste Datei
+# Datei herunterladen
+def download_file(url, filename):
 
-def fetch_download_url(file_id):
-    url = f"https://api.nexusmods.com/v1/games/{GAME_DOMAIN}/mods/{MOD_ID}/files/{file_id}/download_link.json"
-    r = requests.get(url, headers=HEADERS)
-    if r.status_code != 200:
-        raise Exception("Fehler beim Abrufen des Download-Links.")
-    links = r.json()
-    return links[0]["URI"]  # erster Mirror-Link
+    # Die URL und das Token aus der .env-Datei
+    server_url = os.getenv('SERVER_URL')
+    token = os.getenv('TOKEN')
 
-def download_file(url, target_path):
-    r = requests.get(url, stream=True)
-    if r.status_code != 200:
-        raise Exception("Download fehlgeschlagen.")
-    total = int(r.headers.get('content-length', 0))
-    with open(target_path, 'wb') as file, tqdm(
-        desc=target_path.name,
-        total=total,
-        unit='iB',
-        unit_scale=True,
-        unit_divisor=1024,
-    ) as bar:
-        for data in r.iter_content(chunk_size=1024):
-            size = file.write(data)
-            bar.update(size)
+    # Der Dateiname, den du herunterladen möchtest
+    filename = "seamless-coop.zip"
 
-def unzip_file(zip_path, extract_to):
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall(extract_to)
+    # URL zum Download erstellen
+    download_url = f"{server_url}?token={token}&file={filename}"
 
-def main():
-    try:
-        print("Mod wird gesucht...")
-        file_info = fetch_latest_file_info()
-        file_id = file_info["file_id"]
-        file_name = file_info["file_name"]
-        print(f"Gefunden: {file_name}")
+    response = requests.get(url)
 
-        print("Download-Link wird geholt...")
-        download_url = fetch_download_url(file_id)
+    if response.status_code == 200:
+        print(f"Download erfolgreich: {filename}")
+        with open(filename, 'wb') as f:
+            f.write(response.content)
+    else:
+        print(f"Fehler beim Download: {response.status_code}")
 
-        downloads_dir = get_downloads_folder()
-        zip_path = downloads_dir / file_name
-        print(f"Lade herunter nach: {zip_path}")
-        download_file(download_url, zip_path)
-
-        print("Entpacke ZIP...")
-        unzip_file(zip_path, downloads_dir)
-        print("Fertig! Mod ist im Downloads-Ordner entpackt.")
-    except Exception as e:
-        print(f"Fehler: {e}")
-
+# Hauptlogik ausführen
 if __name__ == "__main__":
-    main()
+    download_file(download_url, filename)
