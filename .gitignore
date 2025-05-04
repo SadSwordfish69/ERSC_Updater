@@ -1,2 +1,5 @@
 *.env
 *.txt
+exe.ico
+Updater.spec
+dist
